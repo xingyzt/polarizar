@@ -4,84 +4,83 @@ import math
 import random
 import time
 
-with np.load('B.npz') as X:
-    mtx, dist, _, _ = X
-
-def draw(img, corners, imgpts):
-    corner = tuple(corners[0].ravel())
-    img = cv.line(img, corner, tuple(imgpts[0].ravel()), (255,0,0), 5)
-    img = cv.line(img, corner, tuple(imgpts[1].ravel()), (0,255,0), 5)
-    img = cv.line(img, corner, tuple(imgpts[2].ravel()), (0,0,255), 5)
-    return img
-
-criteria = (cv.TERM_CRITERIA_EPS + cv.TERM_CRITERIA_MAX_ITER, 30, 0.001)
-axis = np.float32([[3,0,0], [0,3,0], [0,0,-3]]).reshape(-1,3)
-
-# define a video capture object
-vid = cv.VideoCapture(2)
-
-rho = 8  # distance resolution in pixels of the Hough grid
-theta = np.pi / 180  # angular resolution in radians of the Hough grid
-threshold = 20  # minimum number of votes (intersections in Hough grid cell)
-min_line_length = 50  # minimum number of pixels making up a line
-max_line_gap = 100  # maximum gap in pixels between connectable line segments
-
-objectPoints = []
-realPoints = []
-
 def randColor():
     return (random.randint(0,255),random.randint(0,255),random.randint(0,255))
+
+# Capture the webcam. Change the number if no work
+vid = cv.VideoCapture(0)
+
+# Image features
+oldFeatures = []
   
 while True:
       
-    # Capture the video frame
-    # by frame
+    # Read every frame
     ret, img = vid.read()
 
+    # Warp to top-down view
+    (Y, X) = img.shape[0:2]
+    srcPlane = np.float32([[0, 0], [X, 0], [X+1000, Y], [-1000, Y]])
+    dstPlane = np.float32([[0, 0], [X, 0], [X, Y], [0, Y]])
+    homographyMat = cv.getPerspectiveTransform(srcPlane, dstPlane)
+    warped = cv.warpPerspective(img, homographyMat, (X, Y))
+
+    # Height & width of image
+    rows, cols = img.shape[:2]
+
+    # Mask by hue-saturation-value
     hsv = cv.cvtColor(img, cv.COLOR_BGR2HSV)
     lower = np.array([10,120,50])
     upper = np.array([25,255,255])
     mask = cv.inRange(hsv, lower, upper)
 
-    height,width = mask.shape
-    skel = np.zeros([height,width],dtype=np.uint8)      #[height,width,3]
+    # Find contours in mask
+    newFeatures = []
+    contours, hierarchy = cv.findContours(mask, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
+    for contour in contours:
 
-    kernel = cv.getStructuringElement(cv.MORPH_CROSS, (3,1))
+        # Filter out small contours (likely noise)
+        area = cv.contourArea(contour)
+        if area < 100: continue
 
-    while(np.count_nonzero(mask) != 0 ):
-        eroded = cv.erode(mask,kernel)
-        temp = cv.dilate(eroded,kernel)
-        temp = cv.subtract(mask,temp)
-        skel = cv.bitwise_or(skel,temp)
-        mask = eroded.copy()
+        # Find bounding convex hull
+        hull = cv.convexHull(contour)
+        cv.drawContours(img, [hull], -1, (255,0,0), 1)
 
-    kernel = cv.getStructuringElement(cv.MORPH_CROSS, (2,1))
-    skel = cv.Sobel(skel,-1,1,0)
-    skel = cv.erode(skel, kernel)
-    cv.imshow("e",skel)
+        # Find bounding rotated rectangle
+        rect = cv.minAreaRect(hull)
+        box = np.int0(cv.boxPoints(rect))
+        cv.drawContours(img, [box], -1, (0,255,0), 1)
+
+        # Find centroid
+        M = cv.moments(contour)
+        cx = int(M['m10']/M['m00'])
+        cy = int(M['m01']/M['m00'])
+
+        # Fit line segment
+        perimeter = cv.arcLength(hull, True)
+        [vx, vy, x, y] = cv.fitLine(hull, cv.DIST_L2, 0, 0.01, 0.01)
+        magnitude = perimeter / 4 / pow(vx*vx + vy*vy, 0.5)
+        dx = int(magnitude*vx*np.sign(vy))
+        dy = int(magnitude*abs(vy))
+        top = (cx-dx, cy-dy)
+        bottom = (cx+dx, cy+dy)
+
+        cv.line(img, bottom, top, (0,0,255), 3)
+        cv.circle(img, bottom, 10, (255,0,0), 3)
+
+        [wbottom, wtop] = np.int16(cv.perspectiveTransform(np.float32([[bottom, top]]), homographyMat)[0])
+        newFeatures.append(wbottom)
+        cv.line(warped, wbottom, wtop, (0,0,255), 3)
+        cv.circle(warped, wbottom, 10, (255,0,0), 3)
+
+    cv.imshow("img", img)
+    cv.imshow("warped", warped)
+    cv.moveWindow("warped", 800, 0)
+    oldFeatures = newFeatures.copy()
 
 
-    lines = cv.HoughLinesP(skel, rho, theta, threshold, np.array([]),
-                    min_line_length, max_line_gap)
 
-    if lines is not None:
-        for line in lines:
-            for x1,y1,x2,y2 in line:
-                if y1 > y2:
-                    start = (x1,y1)
-                    end = (x2,y2)
-                else:
-                    start = (x2,y2)
-                    end = (x1,y1)
-                cv.line(img,(x1,y1),(x2,y2),(255,100,0), 3)
-                cv.circle(img,start,4,(0,0,0),3)
-
-    # Find the rotation and translation vectors.
-    #ret, rvecs, tvecs = cv.solvePnP(realPoints, imgPoints, mtx, dist)
-    # project 3D points to image plane
-    #imgpts, jac = cv.projectPoints(axis, rvecs, tvecs, mtx, dist)
-
-    cv.imshow("res", img)
     ##time.sleep(0.5)
       
     # the 'q' button is set as the
