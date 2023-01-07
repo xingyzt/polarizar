@@ -2,7 +2,7 @@ import cv2 as cv
 import numpy as np
 
 # define a video capture object
-vid = cv.VideoCapture(2)
+vid = cv.VideoCapture(4)
   
 while(True):
       

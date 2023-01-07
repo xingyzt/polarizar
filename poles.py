@@ -18,11 +18,11 @@ criteria = (cv.TERM_CRITERIA_EPS + cv.TERM_CRITERIA_MAX_ITER, 30, 0.001)
 axis = np.float32([[3,0,0], [0,3,0], [0,0,-3]]).reshape(-1,3)
 
 # define a video capture object
-vid = cv.VideoCapture(3)
+vid = cv.VideoCapture(2)
 
-rho = 2  # distance resolution in pixels of the Hough grid
-theta = np.pi / 360  # angular resolution in radians of the Hough grid
-threshold = 50  # minimum number of votes (intersections in Hough grid cell)
+rho = 8  # distance resolution in pixels of the Hough grid
+theta = np.pi / 180  # angular resolution in radians of the Hough grid
+threshold = 20  # minimum number of votes (intersections in Hough grid cell)
 min_line_length = 50  # minimum number of pixels making up a line
 max_line_gap = 100  # maximum gap in pixels between connectable line segments
 
@@ -55,7 +55,8 @@ while True:
         skel = cv.bitwise_or(skel,temp)
         mask = eroded.copy()
 
-    kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, (2,2))
+    kernel = cv.getStructuringElement(cv.MORPH_CROSS, (2,1))
+    skel = cv.Sobel(skel,-1,1,0)
     skel = cv.erode(skel, kernel)
     cv.imshow("e",skel)
 
