@@ -14,8 +14,9 @@ vid = cv.VideoCapture(0)
 matcher = cv.BFMatcher(cv.NORM_L2, crossCheck=True)
 oldPts = []
 
-first = True
-  
+# Position 
+oldPos = (1,1)
+
 while True:
       
     # Read every frame
@@ -78,25 +79,40 @@ while True:
         cv.line(warped, wbottom, wtop, (0,0,255), 2)
         cv.circle(warped, wbottom, 5, (255,0,0), 2)
 
-    if first: 
-        first = False
-    elif len(newPts):
+    if len(oldPts) and len(newPts):
         # Find similarities 
         matches = matcher.match(np.float32(oldPts), np.float32(newPts))
         matches = sorted(matches, key = lambda x:x.distance)
+
+        matchedOldPts = []
+        matchedNewPts = []
+
         for match in matches:
-            newPt = newPts[match.trainIdx]
+
             oldPt = oldPts[match.queryIdx]
+            newPt = newPts[match.trainIdx]
+
+            matchedOldPts.append(oldPt)
+            matchedNewPts.append(newPt)
+
             diff = np.subtract(newPt, oldPt)
-            print(match)
             cv.line(warped, oldPt, newPt, (255,255,0), 2)
             cv.line(warped, oldPt-3*diff, newPt, (255,255,0))
             cv.circle(warped, oldPt, 2, (255,255,0))
+
+        if len(matchedOldPts) > 4:
+            movementMat, mask = cv.findHomography(np.float32(matchedOldPts), np.float32(matchedNewPts), cv.RANSAC,10.0)
+            newPos = cv.perspectiveTransform(np.float32([[oldPos]]), homographyMat)[0][0]
+            print(newPos)
+            oldPos = newPos
+
+
+    if len(newPts):
         oldPts = newPts.copy()
 
-    cv.imshow("img", img)
+    #cv.imshow("img", img)
     cv.imshow("warped", warped)
-    cv.moveWindow("warped", 800, 0)
+    #cv.moveWindow("warped", 800, 0)
 
 
     ##time.sleep(0.5)
