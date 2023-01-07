@@ -11,14 +11,17 @@ def randColor():
 vid = cv.VideoCapture(0)
 
 # Image features
-oldFeatures = []
+matcher = cv.BFMatcher(cv.NORM_L2, crossCheck=True)
+oldPts = []
+
+first = True
   
 while True:
       
     # Read every frame
     ret, img = vid.read()
 
-    # Warp to top-down view
+    # Perspective project to top-down view
     (Y, X) = img.shape[0:2]
     srcPlane = np.float32([[0, 0], [X, 0], [X+1000, Y], [-1000, Y]])
     dstPlane = np.float32([[0, 0], [X, 0], [X, Y], [0, Y]])
@@ -35,7 +38,7 @@ while True:
     mask = cv.inRange(hsv, lower, upper)
 
     # Find contours in mask
-    newFeatures = []
+    newPts = []
     contours, hierarchy = cv.findContours(mask, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
     for contour in contours:
 
@@ -66,19 +69,34 @@ while True:
         top = (cx-dx, cy-dy)
         bottom = (cx+dx, cy+dy)
 
-        cv.line(img, bottom, top, (0,0,255), 3)
-        cv.circle(img, bottom, 10, (255,0,0), 3)
+        cv.line(img, bottom, top, (0,0,255))
+        cv.circle(img, bottom, 10, (255,0,0))
 
+        # Perspective project these features
         [wbottom, wtop] = np.int16(cv.perspectiveTransform(np.float32([[bottom, top]]), homographyMat)[0])
-        newFeatures.append(wbottom)
-        cv.line(warped, wbottom, wtop, (0,0,255), 3)
-        cv.circle(warped, wbottom, 10, (255,0,0), 3)
+        newPts.append(wbottom)
+        cv.line(warped, wbottom, wtop, (0,0,255), 2)
+        cv.circle(warped, wbottom, 5, (255,0,0), 2)
+
+    if first: 
+        first = False
+    elif len(newPts):
+        # Find similarities 
+        matches = matcher.match(np.float32(oldPts), np.float32(newPts))
+        matches = sorted(matches, key = lambda x:x.distance)
+        for match in matches:
+            newPt = newPts[match.trainIdx]
+            oldPt = oldPts[match.queryIdx]
+            diff = np.subtract(newPt, oldPt)
+            print(match)
+            cv.line(warped, oldPt, newPt, (255,255,0), 2)
+            cv.line(warped, oldPt-3*diff, newPt, (255,255,0))
+            cv.circle(warped, oldPt, 2, (255,255,0))
+        oldPts = newPts.copy()
 
     cv.imshow("img", img)
     cv.imshow("warped", warped)
     cv.moveWindow("warped", 800, 0)
-    oldFeatures = newFeatures.copy()
-
 
 
     ##time.sleep(0.5)
