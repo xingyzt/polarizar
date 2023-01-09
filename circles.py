@@ -14,22 +14,12 @@ while(True):
     avg = np.average(np.average(gray, axis=0), axis=0)
 
     (Y, X) = img.shape[0:2]
-    X-=1
-    Y-=1
-    W=0
-    H=0
-    w=1000
-    
-    srcPlane = np.array([[W, H], [X-W, H], [X+w, Y], [-w, Y]])
-    dstPlane = np.array([[0,0], [X, 0], [X, Y], [0, Y]])
-
-    pts = srcPlane.reshape((-1,1,2))
-    cv.polylines(img,[pts],True,(0,255,255))
-
-    cv.imshow("un",img)
-    homographyMat, status = cv.findHomography(srcPlane, dstPlane)
-    warped = cv.warpPerspective(gray, homographyMat, (X, Y))
-    warped = cv.resize(warped, (int(warped.shape[0]*1.2), warped.shape[1]))
+    w = 1800
+    Yf = int(Y*1.7)
+    srcPlane = np.float32([[0, 0], [X, 0], [X+w, Y], [-w, Y]])
+    dstPlane = np.float32([[0, 0], [X, 0], [X, Yf], [0, Yf]])
+    homographyMat = cv.getPerspectiveTransform(srcPlane, dstPlane)
+    warped = cv.warpPerspective(gray, homographyMat, (X, Yf))
 
     diff = cv.absdiff(warped, int(avg))
     
@@ -38,10 +28,10 @@ while(True):
             diff, 
             method=cv.HOUGH_GRADIENT_ALT,
             dp=1.5,
-            minDist=100,
-            param1=10, # gradient threshold
+            minDist=10,
+            param1=100, # gradient threshold
             param2=0.6, # circle closeness
-            minRadius=8,
+            minRadius=4,
             maxRadius=12
     )
 

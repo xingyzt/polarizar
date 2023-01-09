@@ -12,6 +12,12 @@ blue = (255,0,0)
 def rand_color():
     return (random.randint(0,255),random.randint(0,255),random.randint(0,255))
 
+def sort_y(coords):
+    return sorted(coords, key = lambda x:x[1])
+
+def perp(a) :
+    return [-a[1], a[0]]
+
 # line segment a given by endpoint a and slope da
 # line segment b given by endpoint b and slope db
 # return
@@ -19,36 +25,35 @@ def seg_intersect(a1,a2, b1,b2) :
     da = a2-a1
     db = b2-b1
     dp = a1-b1
-    dap = [-da[1], da[0]] # perperdicular vector to da
+    dap = perp(da) # perperdicular vector to da
     denom = np.dot( dap, db)
     num = np.dot( dap, dp )
     return (num / denom.astype(float))*db + b1
 
 # Capture the webcam. Change the number if no work
-vid = cv.VideoCapture(0)
+vid = cv.VideoCapture(2)
 
-cv.namedWindow("warped", cv.WINDOW_NORMAL)
-cv.namedWindow("path", cv.WINDOW_NORMAL)
+calibration = np.array([736.6773965, 0., 340.95853941, 0., 736.16588227, 230.1742966,  0., 0., 1.])
+cv.namedWindow('warped', cv.WINDOW_NORMAL)
+cv.namedWindow('path', cv.WINDOW_NORMAL)
 
 grid_size = 140
-true_pts = np.float32([
-             [-1,-2],          [+1,-2],
-    [-2,-1], [-1,-1], [ 0,-1], [+1,-1], [+2,-1],
-             [-1, 0],          [+1, 0],
+true_pts = np.array([
+             [-1,+2],          [+1,+2],
     [-2,+1], [-1,+1], [ 0,+1], [+1,+1], [+2,+1],
-             [-1,+2],          [+1,+2]
+             [-1, 0],          [+1, 0],
+    [-2,-1], [-1,-1], [ 0,-1], [+1,-1], [+2,-1],
+             [-1,-2],          [+1,-2]
 ])
-start_pos = np.float32([+1,+2])
-
-# _position 
-old_pos = start_pos
-
-path_img = np.zeros((1000,1000,3), np.uint8)
-def path_pt(pt):
-    return np.int16(grid_size*pt + 500)
+print(true_pts)
 
 # Image features
 matcher = cv.BFMatcher(cv.NORM_L2, crossCheck=True)
+old_pts = []
+
+# _position 
+old_pos = [500,100]
+path = np.zeros((1000,1000,3), np.uint8)
 
 while True:
       
@@ -65,10 +70,10 @@ while True:
     (Y, X) = img.shape[0:2]
     w = 1800
     Yf = int(Y*1.78)
-    src_plane = np.float32([[0, 0], [X, 0], [X+w, Y], [-w, Y]])
-    project_plane = np.float32([[0, 0], [X, 0], [X, Yf], [0, Yf]])
-    project_mat = cv.getPerspectiveTransform(src_plane, project_plane)
-    warped_img = cv.warpPerspective(img, project_mat, (X, Yf))
+    srcPlane = np.float32([[0, 0], [X, 0], [X+w, Y], [-w, Y]])
+    dstPlane = np.float32([[0, 0], [X, 0], [X, Yf], [0, Yf]])
+    homographyMat = cv.getPerspectiveTransform(srcPlane, dstPlane)
+    warped = cv.warpPerspective(img, homographyMat, (X, Yf))
 
     # Find contours in mask
     new_pts = []
@@ -92,10 +97,10 @@ while True:
         M = cv.moments(contour)
         center = (int(M['m10']/M['m00']), int(M['m01']/M['m00']))
 
-        # Fit line segment and find base of pole
+        # Fit line segment
         [[vx], [vy], [x], [y]] = cv.fitLine(hull, cv.DIST_L2, 0, 0.01, 0.01)
-        [left, right] = sorted(box, key = lambda x:x[1])[2:]
-        base = np.float32(seg_intersect(
+        [left, right] = sort_y(box)[2:]
+        bottom = np.int16(seg_intersect(
             np.array([x,y]), 
             np.array([x+vx,y+vy]),
             np.array(left), 
@@ -103,60 +108,58 @@ while True:
         )
 
         # Perspective project these features
-        [warped_base, warped_left, warped_right, warped_center] = np.float32(
-            cv.perspectiveTransform(np.float32([
-                [base, left, right, center]
-            ]), project_mat)[0]
-        )
+        [wbottom, wleft, wright, wcenter] = np.int16(cv.perspectiveTransform(np.float32([
+            [bottom, left, right, center]
+        ]), homographyMat)[0])
 
-        rel_pos = warped_base/grid_size
-        new_pt = old_pos + np.array([rel_pos[0], -rel_pos[1]])
-        new_pts.append(new_pt)
+        new_pts.append(wbottom)
 
-        cv.line(img, np.int16(base), np.int16(center), blue, 1)
-        cv.line(warped_img, np.int16(warped_base), np.int16(warped_center), blue, 1)
+        cv.line(img, bottom, center, blue, 1)
+        cv.line(warped, wbottom, wcenter, blue, 1)
 
-        cv.line(img, np.int16(left), np.int16(right), blue, 1)
-        cv.line(warped_img, np.int16(warped_left), np.int16(warped_right), blue, 1)
+        cv.line(img, left, right, blue, 1)
+        cv.line(warped, wleft, wright, blue, 1)
 
-    if len(new_pts) > 1:
+    if len(old_pts) and len(new_pts):
         # Find similarities 
-        matches = matcher.match(true_pts, new_pts)
+        matches = matcher.match(np.float32(old_pts), np.float32(new_pts))
         matches = sorted(matches, key = lambda x:x.distance)
 
-        matched_true_pts = []
-        matched_new_pts = []
+        matchedOld_pts = []
+        matchedNew_pts = []
 
         for match in matches:
 
-            true_pt = true_pts[match.queryIdx]
-            new_pt = new_pts[match.trainIdx]
+            oldPt = old_pts[match.queryIdx]
+            newPt = new_pts[match.trainIdx]
 
-            delta = np.subtract(new_pt, true_pt)
+            delta = np.subtract(newPt, oldPt)
 
-            matched_true_pts.append(true_pt)
-            matched_new_pts.append(new_pt)
+            matchedOld_pts.append(oldPt)
+            matchedNew_pts.append(newPt)
 
-            cv.line(path_img, path_pt(true_pt), path_pt(new_pt), red, 1)
+            cv.line(warped, oldPt, newPt, red, 4)
+            cv.line(warped, oldPt-3*delta, newPt, red, 2)
 
-        if len(matched_new_pts) > 1:
-
+        if len(matchedOld_pts) >= 2:
             transformation, inliers = cv.estimateAffinePartial2D(
-                    np.array([matched_true_pts]),
-                    np.array([matched_new_pts])
+                    np.array([matchedOld_pts]),
+                    np.array([matchedNew_pts])
                 )
             new_pos = transformation.dot([old_pos[0], old_pos[1], 1])
-
-            #fade path img
-            path_img = (path_img * 0.99).astype("uint8")
-            cv.line(path_img, path_pt(old_pos), path_pt(new_pos), rand_color(), 2)
+            path = (path * 0.99).astype("uint8")
+            cv.line(path, np.int16(old_pos), np.int16(new_pos), rand_color(), 2)
             print(new_pos)
             old_pos = new_pos
 
+
+    if len(new_pts):
+        old_pts = new_pts.copy()
+
     #cv.imshow("img", img)
-    cv.rectangle(warped_img, (236, 715), (236+grid_size, 715-grid_size), red)
-    cv.imshow("warped", warped_img)
-    cv.imshow("path", path_img)
+    cv.rectangle(warped, (236, 715), (236+gridSize, 715-gridSize), red)
+    cv.imshow("warped", warped)
+    cv.imshow("path", path)
 
 
     ##time.sleep(0.5)
