@@ -13,7 +13,8 @@ PINK =  (255,0,255)
 CYAN =  (255,255,0)
 WHITE = (255,255,255)
 
-
+matched_new_pts = []
+matched_true_pts = []
 
 def rand_color():
     return (random.randint(0,255),random.randint(0,255),random.randint(0,255))
@@ -33,8 +34,8 @@ def seg_intersect(a1,a2, b1,b2) :
 # Capture the webcam. Change the number if no work
 vid = cv.VideoCapture(0)
 
-cv.namedWindow("warped", cv.WINDOW_NORMAL)
-#cv.namedWindow("path", cv.WINDOW_NORMAL)
+cv.namedWindow("vis", cv.WND_PROP_FULLSCREEN)
+cv.setWindowProperty("vis", cv.WND_PROP_FULLSCREEN, cv.WINDOW_FULLSCREEN)
 
 GRID_SIZE = 140
 TRUE_PTS = np.float32([
@@ -45,14 +46,17 @@ TRUE_PTS = np.float32([
              [-1,+2],          [+1,+2]
 ])
 START_POS = np.float32([+1.5,+3])
-PATH_SIZE = 700
+MAP_SIZE = 700
 
 # _position 
 old_pos = START_POS
 
-path_img = np.zeros((PATH_SIZE,PATH_SIZE,3), np.uint8)
-def path_pt(pt):
-    return np.int16(PATH_SIZE/8*pt + PATH_SIZE/2)
+map_img = np.zeros((MAP_SIZE,MAP_SIZE,3), np.uint8)
+def map_pt(pt):
+    return np.int16(MAP_SIZE/8*pt + MAP_SIZE/2)
+def warped_pt(pt):
+    q = (pt-old_pos)*GRID_SIZE
+    return np.int16([ q[0]+X/2, q[1]+Yf ])
 
 # Image features
 matcher = cv.BFMatcher(cv.NORM_L2, crossCheck=True)
@@ -61,8 +65,6 @@ while True:
 
     # Read every frame
     ret, img = vid.read()
-
-    #old_pos = START_POS
 
     # Mask by hue-saturation-value
     hsv = cv.cvtColor(img, cv.COLOR_BGR2HSV)
@@ -155,27 +157,36 @@ while True:
             new_pos = transformation.dot([old_pos[0], old_pos[1], 1])
             print(new_pos)
 
-            #fade path img
-            cv.line(path_img, path_pt(old_pos), path_pt(new_pos), rand_color(), 2)
+            #fade map img
+            cv.line(map_img, map_pt(old_pos), map_pt(new_pos), rand_color(), 2)
             old_pos = new_pos
 
     #cv.imshow("img", img)
 
-    path_img = (path_img * 0.8).astype("uint8")
-    cv.drawMarker(path_img, path_pt(START_POS), GREEN, cv.MARKER_DIAMOND, 25, 2)
-    cv.drawMarker(path_img, path_pt(old_pos), WHITE, cv.MARKER_CROSS, 20, 2)
+    # map visualization
+    cv.drawMarker(map_img, map_pt(START_POS), GREEN, cv.MARKER_STAR, 20, 2)
+    cv.drawMarker(map_img, map_pt(old_pos), WHITE, cv.MARKER_CROSS, 20, 2)
     for pt in new_pts:
-        cv.circle(path_img, path_pt(pt), 10, RED, 1)
+        cv.drawMarker(warped_img, warped_pt(pt), RED, cv.MARKER_DIAMOND, 18, 1)
+        cv.drawMarker(map_img, map_pt(pt), RED, cv.MARKER_DIAMOND, 18, 1)
     for pt in matched_new_pts:
-        cv.circle(path_img, path_pt(pt), 10, PINK, 3)
+        cv.drawMarker(warped_img, warped_pt(pt), PINK, cv.MARKER_DIAMOND, 20, 2)
+        cv.drawMarker(map_img, map_pt(pt), PINK, cv.MARKER_DIAMOND, 20, 2)
     for pt in TRUE_PTS:
-        cv.circle(path_img, path_pt(pt), 5, BLUE, 1)
+        cv.circle(warped_img, warped_pt(pt), 6, BLUE, 1)
+        cv.circle(map_img, map_pt(pt), 6, BLUE, 1)
     for pt in matched_true_pts:
-        cv.circle(path_img, path_pt(pt), 5, BLUE, cv.FILLED)
+        cv.circle(warped_img, warped_pt(pt), 5, CYAN, cv.FILLED)
+        cv.circle(map_img, map_pt(pt), 5, CYAN, cv.FILLED)
       
-    cv.rectangle(warped_img, (236, 715), (236+GRID_SIZE, 715-GRID_SIZE), RED)
-    cv.imshow("warped", warped_img)
-    cv.imshow("path", path_img)
+    cv.rectangle(warped_img, ((X+GRID_SIZE)//2, 715), ((X-GRID_SIZE)//2, 715-GRID_SIZE), RED)
+
+    vis = np.zeros((max(Yf, MAP_SIZE), X+MAP_SIZE,3), np.uint8)
+    vis[:Yf, :X,:3] = warped_img
+    vis[:MAP_SIZE, X:X+MAP_SIZE,:3] = map_img
+    cv.imshow("vis", vis)
+
+    map_img = (map_img * 0.9).astype("uint8")
 
     # the 'q' button is set as the
     # quitting button you may use any
