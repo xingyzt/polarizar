@@ -4,39 +4,65 @@ import math
 import random
 import time
 
-def randColor():
+# colors
+red = (0,0,255)
+green = (0,255,0)
+blue = (255,0,0)
+
+def rand_color():
     return (random.randint(0,255),random.randint(0,255),random.randint(0,255))
 
+def sort_y(coords):
+    return sorted(coords, key = lambda x:x[1])
+
+def perp(a) :
+    return [-a[1], a[0]]
+
+# line segment a given by endpoint a and slope da
+# line segment b given by endpoint b and slope db
+# return
+def seg_intersect(a1,a2, b1,b2) :
+    da = a2-a1
+    db = b2-b1
+    dp = a1-b1
+    dap = perp(da)
+    denom = np.dot( dap, db)
+    num = np.dot( dap, dp )
+    return (num / denom.astype(float))*db + b1
+
+
 # Capture the webcam. Change the number if no work
-vid = cv.VideoCapture(0)
+vid = cv.VideoCapture(2)
+
+calibration = np.array([736.6773965, 0., 340.95853941, 0., 736.16588227, 230.1742966,  0., 0., 1.])
 
 # Image features
 matcher = cv.BFMatcher(cv.NORM_L2, crossCheck=True)
 oldPts = []
 
 # Position 
-oldPos = (1,1)
+oldPos = [500,500]
+path = np.zeros((1000,1000,3), np.uint8)
 
 while True:
       
     # Read every frame
     ret, img = vid.read()
 
-    # Perspective project to top-down view
-    (Y, X) = img.shape[0:2]
-    srcPlane = np.float32([[0, 0], [X, 0], [X+1000, Y], [-1000, Y]])
-    dstPlane = np.float32([[0, 0], [X, 0], [X, Y], [0, Y]])
-    homographyMat = cv.getPerspectiveTransform(srcPlane, dstPlane)
-    warped = cv.warpPerspective(img, homographyMat, (X, Y))
-
-    # Height & width of image
-    rows, cols = img.shape[:2]
 
     # Mask by hue-saturation-value
     hsv = cv.cvtColor(img, cv.COLOR_BGR2HSV)
     lower = np.array([10,120,50])
     upper = np.array([25,255,255])
     mask = cv.inRange(hsv, lower, upper)
+
+    # Perspective project to top-down view
+    (Y, X) = img.shape[0:2]
+    w = 1600
+    srcPlane = np.float32([[0, 0], [X, 0], [X+w, Y], [-w, Y]])
+    dstPlane = np.float32([[0, 0], [X, 0], [X, Y], [0, Y]])
+    homographyMat = cv.getPerspectiveTransform(srcPlane, dstPlane)
+    warped = cv.warpPerspective(img, homographyMat, (X, Y))
 
     # Find contours in mask
     newPts = []
@@ -49,35 +75,36 @@ while True:
 
         # Find bounding convex hull
         hull = cv.convexHull(contour)
-        cv.drawContours(img, [hull], -1, (255,0,0), 1)
+        #cv.drawContours(img, [hull], -1, blue, 1)
 
         # Find bounding rotated rectangle
         rect = cv.minAreaRect(hull)
         box = np.int0(cv.boxPoints(rect))
-        cv.drawContours(img, [box], -1, (0,255,0), 1)
+        #cv.drawContours(img, [box], -1, green, 1)
 
         # Find centroid
         M = cv.moments(contour)
-        cx = int(M['m10']/M['m00'])
-        cy = int(M['m01']/M['m00'])
+        center = (int(M['m10']/M['m00']), int(M['m01']/M['m00']))
 
         # Fit line segment
-        perimeter = cv.arcLength(hull, True)
-        [vx, vy, x, y] = cv.fitLine(hull, cv.DIST_L2, 0, 0.01, 0.01)
-        magnitude = perimeter / 4 / pow(vx*vx + vy*vy, 0.5)
-        dx = int(magnitude*vx*np.sign(vy))
-        dy = int(magnitude*abs(vy))
-        top = (cx-dx, cy-dy)
-        bottom = (cx+dx, cy+dy)
-
-        cv.line(img, bottom, top, (0,0,255))
-        cv.circle(img, bottom, 10, (255,0,0))
+        [[vx], [vy], [x], [y]] = cv.fitLine(hull, cv.DIST_L2, 0, 0.01, 0.01)
+        [left, right] = sort_y(box)[2:]
+        bottom = np.int16(seg_intersect(
+            np.array([x,y]), 
+            np.array([x+vx,y+vy]),
+            np.array(left), 
+            np.array(right))
+        )
 
         # Perspective project these features
-        [wbottom, wtop] = np.int16(cv.perspectiveTransform(np.float32([[bottom, top]]), homographyMat)[0])
+        [wbottom, wleft, wright, wcenter] = np.int16(cv.perspectiveTransform(np.float32([
+            [bottom, left, right, center]
+        ]), homographyMat)[0])
+
         newPts.append(wbottom)
-        cv.line(warped, wbottom, wtop, (0,0,255), 2)
-        cv.circle(warped, wbottom, 5, (255,0,0), 2)
+        cv.line(warped, wbottom, wcenter, blue, 1)
+        cv.line(warped, wleft, wright, blue, 1)
+        cv.circle(warped, wbottom, 5, blue, 2)
 
     if len(oldPts) and len(newPts):
         # Find similarities 
@@ -96,13 +123,18 @@ while True:
             matchedNewPts.append(newPt)
 
             diff = np.subtract(newPt, oldPt)
-            cv.line(warped, oldPt, newPt, (255,255,0), 2)
-            cv.line(warped, oldPt-3*diff, newPt, (255,255,0))
-            cv.circle(warped, oldPt, 2, (255,255,0))
+            cv.line(warped, oldPt, newPt, red, 4)
+            cv.line(warped, oldPt-3*diff, newPt, red, 2)
+            cv.circle(warped, oldPt, 2, red, 2)
 
-        if len(matchedOldPts) > 4:
-            movementMat, mask = cv.findHomography(np.float32(matchedOldPts), np.float32(matchedNewPts), cv.RANSAC,10.0)
-            newPos = cv.perspectiveTransform(np.float32([[oldPos]]), homographyMat)[0][0]
+        if len(matchedOldPts) >= 2:
+            transformation, inliers = cv.estimateAffinePartial2D(
+                    np.array([matchedOldPts]),
+                    np.array([matchedNewPts])
+                )
+            newPos = transformation.dot([oldPos[0], oldPos[1], 1])
+            path = (path * 0.99).astype("uint8")
+            cv.line(path, np.int16(oldPos), np.int16(newPos), rand_color(), 1)
             print(newPos)
             oldPos = newPos
 
@@ -111,7 +143,8 @@ while True:
         oldPts = newPts.copy()
 
     #cv.imshow("img", img)
-    cv.imshow("warped", warped)
+    cv.imshow("img", warped)
+    cv.imshow("path", path)
     #cv.moveWindow("warped", 800, 0)
 
 
