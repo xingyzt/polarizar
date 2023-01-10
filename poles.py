@@ -19,6 +19,10 @@ matched_true_pts = []
 def rand_color():
     return (random.randint(0,255),random.randint(0,255),random.randint(0,255))
 
+def rot_mat(theta):
+    c, s = np.cos(theta), np.sin(theta)
+    return np.float32([ [c,-s], [s,c] ])
+
 # line segment a given by endpoint a and slope da
 # line segment b given by endpoint b and slope db
 # return
@@ -46,14 +50,15 @@ TRUE_PTS = np.float32([
              [-1,+2],          [+1,+2]
 ])
 START_POS = np.float32([+1.5,+3])
-MAP_SIZE = 700
+CORNER_POS = np.float32([+3,+3])
+MAP_SIZE = 800
 
 # _position 
 old_pos = START_POS
 
 map_img = np.zeros((MAP_SIZE,MAP_SIZE,3), np.uint8)
 def map_pt(pt):
-    return np.int16(MAP_SIZE/8*pt + MAP_SIZE/2)
+    return np.int16(MAP_SIZE/7*pt + MAP_SIZE/2)
 def warped_pt(pt):
     q = (pt-old_pos)*GRID_SIZE
     return np.int16([ q[0]+X/2, q[1]+Yf ])
@@ -100,10 +105,11 @@ while True:
         #cv.drawContours(img, [box], -1, GREEN, 1)
 
         # Find centroid
-        moments = cv.moments(contour)
+        M = cv.moments(contour)
+        print(M)
         center = np.float32([
-            moments['m10']/moments['m00'], 
-            moments['m01']/moments['m00']
+            M['m10']/M['m00'], 
+            M['m01']/M['m00']
         ])
 
         # Fit line segment and find base of pole
@@ -113,8 +119,8 @@ while True:
             np.float32([x,y]), 
             np.float32([x+vx,y+vy]),
             np.float32(left), 
-            np.float32(right))
-        )
+            np.float32(right)
+        ))
 
         # Perspective project these features
         [warped_base, warped_left, warped_right, warped_center] = np.float32(
@@ -144,17 +150,16 @@ while True:
         matched_true_pts = np.float32([TRUE_PTS[match.queryIdx] for match in matches])
         matched_new_pts = np.float32([new_pts[match.trainIdx] for match in matches])
 
-        print(len(matched_true_pts))
-
         if len(matched_new_pts) > 1:
 
-            transformation, inliers = cv.estimateAffinePartial2D(
+            M, inliers = cv.estimateAffinePartial2D(
                     np.array([matched_new_pts]),
                     np.array([matched_true_pts])
                 )
-            transformation[1][0] = 0
-            transformation[0][1] = 0
-            new_pos = transformation.dot([old_pos[0], old_pos[1], 1])
+            scale = np.linalg.norm([M[1,0], M[0,1]])
+            #M[1][0] /= scale
+            #M[0][1] /= scale
+            new_pos = M.dot([old_pos[0], old_pos[1], 1])
             print(new_pos)
 
             #fade map img
@@ -164,6 +169,7 @@ while True:
     #cv.imshow("img", img)
 
     # map visualization
+    cv.rectangle(map_img, map_pt(CORNER_POS), map_pt(-CORNER_POS), BLUE, 1)
     cv.drawMarker(map_img, map_pt(START_POS), GREEN, cv.MARKER_STAR, 20, 2)
     cv.drawMarker(map_img, map_pt(old_pos), WHITE, cv.MARKER_CROSS, 20, 2)
     for pt in new_pts:
