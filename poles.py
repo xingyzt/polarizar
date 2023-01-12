@@ -36,12 +36,12 @@ def seg_intersect(a1,a2, b1,b2) :
     return (num / denom.astype(float))*db + b1
 
 # Capture the webcam. Change the number if no work
-vid = cv.VideoCapture(0)
+vid = cv.VideoCapture(2)
 
 cv.namedWindow("vis", cv.WND_PROP_FULLSCREEN)
 cv.setWindowProperty("vis", cv.WND_PROP_FULLSCREEN, cv.WINDOW_FULLSCREEN)
 
-GRID_SIZE = 140
+GRID_SIZE = 95
 TRUE_PTS = np.float32([
              [-1,-2],          [+1,-2],
     [-2,-1], [-1,-1], [ 0,-1], [+1,-1], [+2,-1],
@@ -49,7 +49,7 @@ TRUE_PTS = np.float32([
     [-2,+1], [-1,+1], [ 0,+1], [+1,+1], [+2,+1],
              [-1,+2],          [+1,+2]
 ])
-START_POS = np.float32([+1.5,+3])
+START_POS = np.float32([+1.65,+1.82])
 CORNER_POS = np.float32([+3,+3])
 MAP_SIZE = 800
 
@@ -79,8 +79,8 @@ while True:
 
     # Perspective project to top-down view
     (Y, X) = img.shape[0:2]
-    w = 1800
-    Yf = int(Y*1.78)
+    w = 3200
+    Yf = int(Y*1.6)
     src_plane = np.float32([[0, 0], [X, 0], [X+w, Y], [-w, Y]])
     project_plane = np.float32([[0, 0], [X, 0], [X, Yf], [0, Yf]])
     project_mat = cv.getPerspectiveTransform(src_plane, project_plane)
@@ -106,7 +106,7 @@ while True:
 
         # Find centroid
         M = cv.moments(contour)
-        print(M)
+        #print(M)
         center = np.float32([
             M['m10']/M['m00'], 
             M['m01']/M['m00']
@@ -185,7 +185,8 @@ while True:
         cv.circle(warped_img, warped_pt(pt), 5, CYAN, cv.FILLED)
         cv.circle(map_img, map_pt(pt), 5, CYAN, cv.FILLED)
       
-    cv.rectangle(warped_img, ((X+GRID_SIZE)//2, 715), ((X-GRID_SIZE)//2, 715-GRID_SIZE), RED)
+    yy = int(Yf*0.9)
+    cv.rectangle(warped_img, ((X+GRID_SIZE)//2, yy), ((X-GRID_SIZE)//2, yy-GRID_SIZE), RED)
 
     vis = np.zeros((max(Yf, MAP_SIZE), X+MAP_SIZE,3), np.uint8)
     vis[:Yf, :X,:3] = warped_img
