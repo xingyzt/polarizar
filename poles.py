@@ -41,7 +41,7 @@ vid = cv.VideoCapture(2)
 cv.namedWindow("vis", cv.WND_PROP_FULLSCREEN)
 cv.setWindowProperty("vis", cv.WND_PROP_FULLSCREEN, cv.WINDOW_FULLSCREEN)
 
-GRID_SIZE = 95
+GRID_SIZE = 185
 TRUE_PTS = np.float32([
              [-1,-2],          [+1,-2],
     [-2,-1], [-1,-1], [ 0,-1], [+1,-1], [+2,-1],
@@ -74,13 +74,13 @@ while True:
     # Mask by hue-saturation-value
     hsv = cv.cvtColor(img, cv.COLOR_BGR2HSV)
     lower = np.array([10,120,50])
-    upper = np.array([25,255,255])
+    upper = np.array([30,255,255])
     mask = cv.inRange(hsv, lower, upper)
 
     # Perspective project to top-down view
     (Y, X) = img.shape[0:2]
-    w = 3200
-    Yf = int(Y*1.6)
+    w = 1300
+    Yf = int(Y*1.5)
     src_plane = np.float32([[0, 0], [X, 0], [X+w, Y], [-w, Y]])
     project_plane = np.float32([[0, 0], [X, 0], [X, Yf], [0, Yf]])
     project_mat = cv.getPerspectiveTransform(src_plane, project_plane)
@@ -185,7 +185,7 @@ while True:
         cv.circle(warped_img, warped_pt(pt), 5, CYAN, cv.FILLED)
         cv.circle(map_img, map_pt(pt), 5, CYAN, cv.FILLED)
       
-    yy = int(Yf*0.9)
+    yy = int(Yf*0.75)
     cv.rectangle(warped_img, ((X+GRID_SIZE)//2, yy), ((X-GRID_SIZE)//2, yy-GRID_SIZE), RED)
 
     vis = np.zeros((max(Yf, MAP_SIZE), X+MAP_SIZE,3), np.uint8)
