@@ -2,6 +2,9 @@
 
 *A visual odometry program for FTC 15303 Space Rocks by Xing Liu*
 
+![A 5x speed demonstration video of a robot recognizing yellow poles in its
+environment and determining its position from them](demo.mp3)
+
 Odometry is a critical component of any fast and precise Autonomous program. In designing our Autonomous strategy, we considered several conventional means of odometry, but discarded every single one for their flaws: Inertial Measurement Units suffer from significant drift during integration; Encoder odometry can be very precise on the short scales, but lack the accuracy for navigating around multiple poles; And while distance sensors can detect poles to high precision, they lack a wide field of view.
 
 In the end, we decided to explore visual odometry instead, which allows our robot to know its position and orientation on the field from the camera alone. This approach is especially useful for this FTC season due to the lattice of highly visible poles on the field. The plan was this: track the positions of poles in the camera, convert them into coordinates on the field, and from them, compute the motion of the robot. In between poles, encoders can then provide more precise positions on top of visual odometry.
