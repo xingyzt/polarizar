@@ -41,7 +41,7 @@ vid = cv.VideoCapture(2)
 cv.namedWindow("vis", cv.WND_PROP_FULLSCREEN)
 cv.setWindowProperty("vis", cv.WND_PROP_FULLSCREEN, cv.WINDOW_FULLSCREEN)
 
-GRID_SIZE = 185
+GRID_SIZE = 180
 TRUE_PTS = np.float32([
              [-1,-2],          [+1,-2],
     [-2,-1], [-1,-1], [ 0,-1], [+1,-1], [+2,-1],
@@ -49,12 +49,19 @@ TRUE_PTS = np.float32([
     [-2,+1], [-1,+1], [ 0,+1], [+1,+1], [+2,+1],
              [-1,+2],          [+1,+2]
 ])
-START_POS = np.float32([+1.65,+1.82])
+START_POS = np.float32([+1.3,+1.7])
 CORNER_POS = np.float32([+3,+3])
-MAP_SIZE = 800
+MAP_SIZE = 700
+
+def translate_mat(d):
+    return np.float32([
+       [1, 0, d[0]],
+       [0, 1, d[1]]
+    ])
 
 # _position 
 old_pos = START_POS
+old_mat = translate_mat(START_POS)
 
 map_img = np.zeros((MAP_SIZE,MAP_SIZE,3), np.uint8)
 def map_pt(pt):
@@ -66,7 +73,8 @@ def warped_pt(pt):
 # Image features
 matcher = cv.BFMatcher(cv.NORM_L2, crossCheck=True)
 
-while True:
+start_time = time.time()
+while time.time() < start_time + 60:
 
     # Read every frame
     ret, img = vid.read()
@@ -80,7 +88,7 @@ while True:
     # Perspective project to top-down view
     (Y, X) = img.shape[0:2]
     w = 1300
-    Yf = int(Y*1.5)
+    Yf = int(Y*1.3)
     src_plane = np.float32([[0, 0], [X, 0], [X+w, Y], [-w, Y]])
     project_plane = np.float32([[0, 0], [X, 0], [X, Yf], [0, Yf]])
     project_mat = cv.getPerspectiveTransform(src_plane, project_plane)
@@ -129,8 +137,8 @@ while True:
             ]), project_mat)[0]
         )
 
-        rel_pos = np.float32([X/2-warped_base[0], Yf-warped_base[1]])/GRID_SIZE
-        new_pt = old_pos - rel_pos
+        rel_pos = np.float32([warped_base[0] - X/2, warped_base[1] - Yf])/GRID_SIZE
+        new_pt = old_mat.dot([rel_pos[0], rel_pos[1], 1])
         new_pts.append(new_pt)
 
         cv.line(img, np.int16(base), np.int16(center), BLUE, 1)
@@ -156,14 +164,35 @@ while True:
                     np.array([matched_new_pts]),
                     np.array([matched_true_pts])
                 )
-            scale = np.linalg.norm([M[1,0], M[0,1]])
-            #M[1][0] /= scale
-            #M[0][1] /= scale
-            new_pos = M.dot([old_pos[0], old_pos[1], 1])
-            print(new_pos)
+            scale = np.linalg.norm([M[0,0], M[1,1]])
+            #M[0][0] /= scale
+            #M[1][1] /= scale
+
+            M.resize((3, 3))
+            M[2] = np.float32([0,0,1])
+
+            old_mat.resize((3, 3))
+            old_mat[2] = np.float32([0,0,1])
+
+            new_mat = np.matmul(M, old_mat)
+
+            M.resize((2, 3))
+            old_mat.resize((2, 3))
+            new_mat.resize((2, 3))
+            print("eaj")
+            print(old_mat)
+            print(M)
+            print(new_mat)
+            new_pos = new_mat.dot([0, 0, 1])
+
+            for pt in ([-1,-1],[-1,1],[1,-1],[1,1]):
+                p = np.float32(pt)
+                new_pt = new_mat.dot([p[0], p[1], 1])[0:2]
+                cv.line(map_img, map_pt(p), map_pt(new_pt), WHITE, 1)
 
             #fade map img
             cv.line(map_img, map_pt(old_pos), map_pt(new_pos), rand_color(), 2)
+            old_mat = np.copy(new_mat)
             old_pos = new_pos
 
     #cv.imshow("img", img)
