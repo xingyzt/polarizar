@@ -185,12 +185,12 @@ while time.time() < start_time + 120:
             new_pos = new_mat.dot([0, 0, 1])
 
             distance = np.linalg.norm(new_pos - old_pos)
-            if distance > 1: continue # Reject sudden jumps
 
-            #fade map img
-            cv.line(map_img, map_pt(old_pos), map_pt(new_pos), rand_color(), 2)
-            old_mat = np.copy(new_mat)
-            old_pos = np.copy(new_pos)
+            # Reject sudden jumps
+            if distance < 1: 
+                cv.line(map_img, map_pt(old_pos), map_pt(new_pos), rand_color(), 2)
+                old_mat = np.copy(new_mat)
+                old_pos = np.copy(new_pos)
 
     #cv.imshow("img", img)
 
