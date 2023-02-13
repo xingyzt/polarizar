@@ -67,7 +67,11 @@ map_img = np.zeros((MAP_SIZE,MAP_SIZE,3), np.uint8)
 def map_pt(pt):
     return np.int16(MAP_SIZE/7*pt + MAP_SIZE/2)
 def warped_pt(pt):
-    q = (pt-old_pos)*GRID_SIZE
+    inv = np.resize(old_mat, (3,3))
+    inv[2] = np.float32([0,0,1])
+    inv = np.linalg.inv(inv)
+    inv.resize((2,3))
+    q = (inv.dot([pt[0], pt[1], 1]))*GRID_SIZE
     return np.int16([ q[0]+X/2, q[1]+Yf ])
 
 # Image features
@@ -185,11 +189,6 @@ while time.time() < start_time + 60:
             print(new_mat)
             new_pos = new_mat.dot([0, 0, 1])
 
-            for pt in ([-1,-1],[-1,1],[1,-1],[1,1]):
-                p = np.float32(pt)
-                new_pt = new_mat.dot([p[0], p[1], 1])[0:2]
-                cv.line(map_img, map_pt(p), map_pt(new_pt), WHITE, 1)
-
             #fade map img
             cv.line(map_img, map_pt(old_pos), map_pt(new_pos), rand_color(), 2)
             old_mat = np.copy(new_mat)
@@ -200,7 +199,16 @@ while time.time() < start_time + 60:
     # map visualization
     cv.rectangle(map_img, map_pt(CORNER_POS), map_pt(-CORNER_POS), BLUE, 1)
     cv.drawMarker(map_img, map_pt(START_POS), GREEN, cv.MARKER_STAR, 20, 2)
-    cv.drawMarker(map_img, map_pt(old_pos), WHITE, cv.MARKER_CROSS, 20, 2)
+    cv.circle(map_img, map_pt(old_pos), 1, WHITE, 2)
+
+    tri = [
+        new_mat.dot(np.float32([pt[0], pt[1], 1]))
+        for pt in ([-0.1, 0.1],[0.1, 0.1],[0,-0.2])
+    ]
+    cv.line(map_img, map_pt(tri[0]), map_pt(tri[1]), WHITE, 2)
+    cv.line(map_img, map_pt(tri[1]), map_pt(tri[2]), WHITE, 2)
+    cv.line(map_img, map_pt(tri[2]), map_pt(tri[0]), WHITE, 2)
+
     for pt in new_pts:
         cv.drawMarker(warped_img, warped_pt(pt), RED, cv.MARKER_DIAMOND, 18, 1)
         cv.drawMarker(map_img, map_pt(pt), RED, cv.MARKER_DIAMOND, 18, 1)
