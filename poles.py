@@ -78,7 +78,7 @@ def warped_pt(pt):
 matcher = cv.BFMatcher(cv.NORM_L2, crossCheck=True)
 
 start_time = time.time()
-while time.time() < start_time + 60:
+while time.time() < start_time + 120:
 
     # Read every frame
     ret, img = vid.read()
@@ -168,9 +168,7 @@ while time.time() < start_time + 60:
                     np.array([matched_new_pts]),
                     np.array([matched_true_pts])
                 )
-            scale = np.linalg.norm([M[0,0], M[1,1]])
-            #M[0][0] /= scale
-            #M[1][1] /= scale
+            scale = np.linalg.det(M[:2,:2])
 
             M.resize((3, 3))
             M[2] = np.float32([0,0,1])
@@ -183,16 +181,16 @@ while time.time() < start_time + 60:
             M.resize((2, 3))
             old_mat.resize((2, 3))
             new_mat.resize((2, 3))
-            print("eaj")
-            print(old_mat)
-            print(M)
-            print(new_mat)
+
             new_pos = new_mat.dot([0, 0, 1])
+
+            distance = np.linalg.norm(new_pos - old_pos)
+            if distance > 1: continue # Reject sudden jumps
 
             #fade map img
             cv.line(map_img, map_pt(old_pos), map_pt(new_pos), rand_color(), 2)
             old_mat = np.copy(new_mat)
-            old_pos = new_pos
+            old_pos = np.copy(new_pos)
 
     #cv.imshow("img", img)
 
